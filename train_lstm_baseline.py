@@ -5,7 +5,7 @@ from baselines import LSTMBaseline
 from utils import ADE, FDE
 import os
 
-# ANSI colors
+# ANSI colors for clean terminal output
 RESET = "\033[0m"
 BOLD = "\033[1m"
 CYAN = "\033[96m"
@@ -13,9 +13,10 @@ GREEN = "\033[92m"
 YELLOW = "\033[93m"
 MAGENTA = "\033[95m"
 
-# Baseline save directory + path
+# Directory for saving the trained baseline model
 BASELINE_DIR = "pretrained_baseline_model"
 os.makedirs(BASELINE_DIR, exist_ok=True)
+
 BASELINE_PATH = os.path.join(BASELINE_DIR, "lstm_baseline.pth")
 
 
@@ -26,8 +27,10 @@ def train_lstm_baseline(
     future=12,
     device=None
 ):
+
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     print(f"{CYAN}{BOLD}▶ Training LSTM baseline (no GAT, no MDN){RESET}")
     print(f"{CYAN}Device:{RESET} {device}")
     print(f"{CYAN}History steps (H):{RESET} {history}")
@@ -36,11 +39,18 @@ def train_lstm_baseline(
     print(f"{CYAN}Epochs:{RESET} {num_epochs}")
     print()
 
+    # -------------------------------------------------------------
+    # Load dataset & create deterministic train/val split
+    # -------------------------------------------------------------
     full_ds = TrajectoryDataset("data", history=history, future=future, verbose=False)
+
     n_total = len(full_ds)
     n_train = int(0.8 * n_total)
     n_val = n_total - n_train
-    train_ds, val_ds = random_split(full_ds, [n_train, n_val])
+
+    # FIX: ensure same split every time (reproducible)
+    g = torch.Generator().manual_seed(42)
+    train_ds, val_ds = random_split(full_ds, [n_train, n_val], generator=g)
 
     print(f"{MAGENTA}Dataset info (LSTM baseline):{RESET}")
     print(f"  Total samples: {n_total}")
@@ -51,6 +61,9 @@ def train_lstm_baseline(
     train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
     val_dl = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
 
+    # -------------------------------------------------------------
+    # Initialize model + optimizer
+    # -------------------------------------------------------------
     model = LSTMBaseline(history=history, future=future).to(device)
     optim = torch.optim.Adam(model.parameters(), lr=1e-3)
     criterion = torch.nn.MSELoss()
@@ -58,6 +71,9 @@ def train_lstm_baseline(
     print(f"{BOLD}Epoch |   Train MSE   |    Val MSE   |  Val ADE  |  Val FDE{RESET}")
     print("---------------------------------------------------------------")
 
+    # -------------------------------------------------------------
+    # Training loop
+    # -------------------------------------------------------------
     for epoch in range(num_epochs):
         model.train()
         total_train_loss = 0.0
@@ -65,17 +81,20 @@ def train_lstm_baseline(
         for past, fut, maps in train_dl:
             past = past.to(device)
             fut = fut.to(device)
-            # maps is unused in this baseline
 
             optim.zero_grad()
             pred = model(past)
             loss = criterion(pred, fut)
             loss.backward()
             optim.step()
+
             total_train_loss += loss.item()
 
         avg_train_loss = total_train_loss / len(train_dl)
 
+        # --------------------------- 
+        # Validation 
+        # ---------------------------
         model.eval()
         total_val_loss = 0.0
         ade_list, fde_list = [], []
@@ -86,6 +105,7 @@ def train_lstm_baseline(
                 fut = fut.to(device)
 
                 pred = model(past)
+
                 loss = criterion(pred, fut)
                 total_val_loss += loss.item()
 
@@ -101,6 +121,9 @@ def train_lstm_baseline(
             f" {avg_ade:8.4f} | {avg_fde:8.4f}"
         )
 
+    # -------------------------------------------------------------
+    # Save trained baseline model
+    # -------------------------------------------------------------
     torch.save(model.state_dict(), BASELINE_PATH)
     print()
     print(f"{GREEN}◡̈ Saved trained LSTM baseline to {BASELINE_PATH}{RESET}")

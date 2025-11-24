@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader, random_split
 from dataset import TrajectoryDataset
-from model import STGAT
+from model import LSTMCNNMDN
 from utils import mdn_loss
 import os
 
@@ -16,11 +16,11 @@ YELLOW = "\033[93m"
 MAGENTA = "\033[95m"
 
 # -------------------------------------------------------------
-# Folder where ST-GAT models are saved
+# Folder where LSTMCNNMDN models are saved
 # -------------------------------------------------------------
 MODEL_DIR = "pretrained_model"
 os.makedirs(MODEL_DIR, exist_ok=True)
-MODEL_PATH = os.path.join(MODEL_DIR, "stgat_mdn.pth")
+MODEL_PATH = os.path.join(MODEL_DIR, "lstmcnnmdn.pth")
 
 
 def train_model(
@@ -33,10 +33,11 @@ def train_model(
     model_path=MODEL_PATH
 ):
 
+    # Choose device
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    print(f"{CYAN}{BOLD}▶ Training ST-GAT + MDN model{RESET}")
+    print(f"{CYAN}{BOLD}▶ Training LSTM-CNN-MDN model{RESET}")
     print(f"{CYAN}Device:{RESET} {device}")
     print(f"{CYAN}History steps (H):{RESET} {history}")
     print(f"{CYAN}Future steps (F):{RESET} {future}")
@@ -50,13 +51,13 @@ def train_model(
     full_ds = TrajectoryDataset("data", history=history, future=future)
 
     # ---------------------------------------------------------
-    # FIXED TRAIN/VAL SPLIT (matches eval.py exactly)
+    # FIXED TRAIN/VAL SPLIT (seed ensures eval.py uses same split)
     # ---------------------------------------------------------
     n_total = len(full_ds)
     n_train = int(0.8 * n_total)
     n_val = n_total - n_train
 
-    g = torch.Generator().manual_seed(42)   # ensure consistent split w/ eval
+    g = torch.Generator().manual_seed(42)
     train_ds, val_ds = random_split(full_ds, [n_train, n_val], generator=g)
 
     print(f"{MAGENTA}Dataset info:{RESET}")
@@ -69,13 +70,13 @@ def train_model(
     val_dl = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
 
     # ---------------------------------------------------------
-    # Initialize model + optimizer
+    # Initialize LSTM-CNN-MDN model + optimizer
     # ---------------------------------------------------------
-    model = STGAT(history=history, future=future, n_gauss=3).to(device)
+    model = LSTMCNNMDN(history=history, future=future, n_gauss=3).to(device)
     optim = torch.optim.Adam(model.parameters(), lr=1e-3)
 
     # ---------------------------------------------------------
-    # Load existing weights (optional)
+    # Load existing model (optional)
     # ---------------------------------------------------------
     if load_existing and os.path.exists(model_path):
         print(f"{GREEN}Loading existing weights from {model_path}...{RESET}")
@@ -131,4 +132,4 @@ def train_model(
     # ---------------------------------------------------------
     torch.save(model.state_dict(), model_path)
     print()
-    print(f"{GREEN}◡̈ Saved trained ST-GAT model to {model_path}{RESET}")
+    print(f"{GREEN}◡̈ Saved trained LSTM-CNN-MDN model to {model_path}{RESET}")

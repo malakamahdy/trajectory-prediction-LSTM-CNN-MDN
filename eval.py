@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader, random_split
 from dataset import TrajectoryDataset
-from model import STGAT
+from model import LSTMCNNMDN
 from baselines import constant_velocity_predict, LSTMBaseline
 from utils import ADE, FDE
 import os
@@ -18,14 +18,12 @@ MAGENTA = "\033[95m"
 # Pretrained model folder paths
 MODEL_DIR = "pretrained_model"
 BASELINE_DIR = "pretrained_baseline_model"
-MODEL_PATH = os.path.join(MODEL_DIR, "stgat_mdn.pth")
+MODEL_PATH = os.path.join(MODEL_DIR, "lstmcnnmdn.pth")
 BASELINE_PATH = os.path.join(BASELINE_DIR, "lstm_baseline.pth")
 
 
 def mdn_best_mode(mu, pi):
-    """
-    Extract the most likely predicted trajectory from the MDN output.
-    """
+    """Extract the most likely predicted trajectory from MDN."""
     best_idx = torch.argmax(pi, dim=1)
     B, K, T, _ = mu.shape
     idx = best_idx.view(B, 1, 1, 1).expand(-1, 1, T, 2)
@@ -35,7 +33,7 @@ def mdn_best_mode(mu, pi):
 
 def evaluate(device=None, batch_size=64, history=8, future=12):
     """
-    Evaluate ST-GAT+MDN, Constant Velocity baseline, and LSTM baseline
+    Evaluate LSTMCNNMDN, Constant Velocity baseline, and LSTM baseline
     on a consistent 20% test split (fixed random seed).
     """
 
@@ -74,16 +72,16 @@ def evaluate(device=None, batch_size=64, history=8, future=12):
     test_dl = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
 
     # -------------------- 
-    # Load ST-GAT Model 
+    # Load LSTMCNNMDN Model 
     # --------------------
     if not os.path.exists(MODEL_PATH):
-        print(f"{YELLOW}⚠ ST-GAT model not found at {MODEL_PATH}. Train it with python main.py{RESET}")
+        print(f"{YELLOW}⚠ Model not found at {MODEL_PATH}. Train it with python main.py{RESET}")
         return
 
-    stgat = STGAT(history=history, future=future, n_gauss=3).to(device)
-    stgat.load_state_dict(torch.load(MODEL_PATH, map_location=device))
-    stgat.eval()
-    print(f"{GREEN}Loaded ST-GAT+MDN model from {MODEL_PATH}{RESET}")
+    model = LSTMCNNMDN(history=history, future=future, n_gauss=3).to(device)
+    model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+    model.eval()
+    print(f"{GREEN}Loaded LSTMCNNMDN model from {MODEL_PATH}{RESET}")
 
     # -------------------- 
     # Load LSTM Baseline 
@@ -97,7 +95,7 @@ def evaluate(device=None, batch_size=64, history=8, future=12):
     lstm_baseline.eval()
 
     # Metric accumulators
-    ade_stgat, fde_stgat = [], []
+    ade_main, fde_main = [], []
     ade_cv, fde_cv = [], []
     ade_lstm, fde_lstm = [], []
 
@@ -110,11 +108,11 @@ def evaluate(device=None, batch_size=64, history=8, future=12):
             fut = fut.to(device)
             maps = maps.to(device)
 
-            # ST-GAT+MDN
-            mu, sigma, pi = stgat(past, maps)
-            pred_stgat = mdn_best_mode(mu, pi)
-            ade_stgat.append(ADE(pred_stgat, fut).item())
-            fde_stgat.append(FDE(pred_stgat, fut).item())
+            # Main model: LSTMCNNMDN
+            mu, sigma, pi = model(past, maps)
+            pred_main = mdn_best_mode(mu, pi)
+            ade_main.append(ADE(pred_main, fut).item())
+            fde_main.append(FDE(pred_main, fut).item())
 
             # Constant Velocity
             pred_cv = constant_velocity_predict(past, future)
@@ -130,7 +128,7 @@ def evaluate(device=None, batch_size=64, history=8, future=12):
     # Averages 
     # --------------------
     models = {
-        "STGAT+MDN": (np.mean(ade_stgat), np.mean(fde_stgat)),
+        "LSTMCNNMDN": (np.mean(ade_main), np.mean(fde_main)),
         "Const-Vel": (np.mean(ade_cv), np.mean(fde_cv)),
         "LSTM base": (np.mean(ade_lstm), np.mean(fde_lstm)),
     }
@@ -161,9 +159,9 @@ def evaluate(device=None, batch_size=64, history=8, future=12):
     print("    Lower = better.\n")
 
     print(f"{BOLD}Model roles:{RESET}")
-    print(f"  • {CYAN}STGAT+MDN{RESET}: Main multi-modal trajectory predictor.")
-    print(f"  • {CYAN}Const-Vel{RESET}: Baseline using linear extrapolation.")
-    print(f"  • {CYAN}LSTM base{RESET}: Baseline without graph attention or map encoding.\n")
+    print(f"  • {CYAN}LSTMCNNMDN{RESET}: Main multi-modal trajectory predictor.")
+    print(f"  • {CYAN}Const-Vel{RESET}: Simple physics-based baseline.")
+    print(f"  • {CYAN}LSTM base{RESET}: Deterministic baseline without scene context.\n")
 
 
 if __name__ == "__main__":

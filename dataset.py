@@ -35,7 +35,7 @@ class TrajectoryDataset(Dataset):
 
             # Expect at least 4 columns: frame, agent_id, x, y
             if df.shape[1] < 4:
-                print(f"⚠️ Skipping {os.path.basename(file_path)}: fewer than 4 columns.")
+                print(f"Skipping {os.path.basename(file_path)}: fewer than 4 columns.")
                 continue
 
             df = df.iloc[:, :4]

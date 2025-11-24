@@ -31,7 +31,7 @@ def train_lstm_baseline(
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    print(f"{CYAN}{BOLD}▶ Training LSTM baseline (no GAT, no MDN){RESET}")
+    print(f"{CYAN}{BOLD}▶ Training LSTM baseline{RESET}")
     print(f"{CYAN}Device:{RESET} {device}")
     print(f"{CYAN}History steps (H):{RESET} {history}")
     print(f"{CYAN}Future steps (F):{RESET} {future}")

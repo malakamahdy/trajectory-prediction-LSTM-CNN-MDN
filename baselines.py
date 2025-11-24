@@ -27,7 +27,6 @@ class LSTMBaseline(nn.Module):
     """
     Simple LSTM that encodes past trajectory [H,2]
     and predicts a deterministic future [F,2] with no social interactions.
-    This is the "no-GAT" baseline from your proposal.
     """
     def __init__(self, history=8, future=12, hidden_size=64):
         super().__init__()

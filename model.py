@@ -11,10 +11,6 @@ class MDNDecoder(nn.Module):
         self.future = future
         self.n_gauss = n_gauss
 
-        # For each Gaussian:
-        #   mu:    T * 2
-        #   sigma: T * 2
-        #   pi:    1
         output_dim = n_gauss * (future * 2 + future * 2 + 1)
         self.fc = nn.Linear(input_dim, output_dim)
 
@@ -60,7 +56,7 @@ class LSTMCNNMDN(nn.Module):
             batch_first=True,
             bidirectional=True
         )
-        self.lstm_proj = nn.Linear(64 * 2, 64)   # project bi-LSTM -> 64-dim
+        self.lstm_proj = nn.Linear(64 * 2, 64)   
 
         # (2) CNN-based map encoder for spatial context
         self.map_encoder = nn.Sequential(
